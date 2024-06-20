@@ -4,67 +4,56 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract DegenGames is ERC20, Ownable {
-    error INSUFFICIENT_TOKEN_BALANCE(string, uint);
+error NotEnoughDegen(string message, uint requiredAmount);
 
-    enum ItemsToRedeem {
-        Toolbox,
-        Nitro,
-        Suspensions,
-        Hydraulics
+contract DegenClone is ERC20, Ownable {
+    enum RedeemItems { Missile, Drone, Chopper, RPG }
+
+    // Mapping to track redeemed items for each user
+    mapping(address => string[]) private _redeemedItems;
+
+    constructor() ERC20("Degen", "DGN") Ownable(msg.sender) {}
+
+    function mint(address to, uint256 amount) public onlyOwner {
+        _mint(to, amount);
     }
 
-    mapping(ItemsToRedeem => uint256) public itemPrices;
-    mapping(address => Item[]) public itemsOwned; // Mapping to store items owned by each address
-
-    struct Item {
-        ItemsToRedeem itemType; // Type of the item
-        bool claimed; // Whether the item has been claimed
+    function transferDegen(address to, uint256 amount) external returns (bool success) {
+        if (amount < balanceOf(msg.sender)) {
+            revert NotEnoughDegen("Degen Token not enough", amount);
+        }
+        success = transfer(to, amount);
     }
 
-    constructor() ERC20("Degen", "DGN") Ownable(msg.sender) {
-        itemPrices[ItemsToRedeem.Toolbox] = 10 * 1e18;
-        itemPrices[ItemsToRedeem.Nitro] = 8 * 1e18;
-        itemPrices[ItemsToRedeem.Suspensions] = 6 * 1e18;
-        itemPrices[ItemsToRedeem.Hydraulics] = 4 * 1e18;
+    function burn(uint256 amount) external {
+        if (amount < balanceOf(msg.sender)) {
+            revert NotEnoughDegen("Degen Token not enough", amount);
+        }
+        _burn(msg.sender, amount);
     }
 
-    function mint(address _receiver, uint256 _amount) external onlyOwner {
-        _mint(_receiver, _amount);
-    }
+    function redeemItems(RedeemItems item) external {
+        uint256 price = 0;
+        if (item == RedeemItems.Missile) {
+            price = 4 * 1e18;
+        } else if (item == RedeemItems.Drone) {
+            price = 3 * 1e18;
+        } else if (item == RedeemItems.Chopper) {
+            price = 2 * 1e18;
+        } else if (item == RedeemItems.RPG) {
+            price = 1 * 1e18;
+        } else {
+            price = 0;
+        }
 
-    function transferDGNToken(
-        address _receiver,
-        uint256 _amount
-    ) external returns (bool success) {
-        require(_amount <= balanceOf(msg.sender), "Insufficient DGN Token");
-        return transfer(_receiver, _amount);
-    }
+        if (price > balanceOf(msg.sender)) {
+            revert NotEnoughDegen("Degen Token not enough", price);
+        }
+        _transfer(msg.sender, address(this), price);
 
-    function burn(uint256 _amount) external {
-        require(_amount <= balanceOf(msg.sender), "Insufficient DGN Token");
-        _burn(msg.sender, _amount);
-    }
-
-    function redeemItems(ItemsToRedeem _item) external {
-        require(itemPrices[_item] > 0, "Invalid item");
-        require(
-            itemPrices[_item] <= balanceOf(msg.sender),
-            "Insufficient DGN  Token"
-        );
-
-        _transfer(msg.sender, address(this), itemPrices[_item]);
-
-        // Transfer the item to the player
-        itemsOwned[msg.sender].push(Item(_item, false));
-    }
-
-    function claimItem(uint256 itemId) external {
-        require(itemId < itemsOwned[msg.sender].length, "Invalid item ID");
-        require(!itemsOwned[msg.sender][itemId].claimed, "Item already claimed");
-
-        // Here you would typically emit an event or perform other actions upon claiming the item
-        itemsOwned[msg.sender][itemId].claimed = true;
+        // Record the redeemed item
+        string[] storage currentRedeemedItems = _redeemedItems[msg.sender];
+        currentRedeemedItems.push(_itemToString(item));
     }
 
     function withdrawFunds() external onlyOwner {
@@ -75,4 +64,23 @@ contract DegenGames is ERC20, Ownable {
         return balanceOf(msg.sender);
     }
 
+    // Helper function to convert enum to string
+    function _itemToString(RedeemItems item) internal pure returns (string memory) {
+        if (item == RedeemItems.Missile) {
+            return "Missile";
+        } else if (item == RedeemItems.Drone) {
+            return "Drone";
+        } else if (item == RedeemItems.Chopper) {
+            return "Chopper";
+        } else if (item == RedeemItems.RPG) {
+            return "RPG";
+        } else {
+            return "";
+        }
+    }
+
+    // Function to display all redeemed items for a user
+    function displayRedeemedItems(address user) public view returns (string[] memory) {
+        return _redeemedItems[user];
+    }
 }
